@@ -19,24 +19,19 @@ Parameters:
     Default: forgeos-ai.wmintelliops.com
     Description: Custom domain for the ForgeOS AI frontend
 
-  HostedZoneName:
-    Type: String
-    Default: wmintelliops.com
-    Description: Route53 Hosted Zone name (without trailing dot)
-
   HostedZoneId:
     Type: String
     Description: >
       Route53 Hosted Zone ID for wmintelliops.com.
       Find it at: AWS Console → Route53 → Hosted Zones → wmintelliops.com
-    Default: ""
+    Default: "Z042530924U7M2H4O1QVK"
 
   CertificateArn:
     Type: String
     Description: >
       ACM Certificate ARN from us-east-1 for forgeos-ai.wmintelliops.com.
-      Run certificate.yaml stack FIRST in us-east-1, then paste the ARN here.
-    Default: ""
+      Paste the ARN from ACM Console here.
+    Default: "arn:aws:acm:ap-south-1:036160411876:certificate/af94f048-8e1b-465e-a0af-7b637976693c"
 
 Globals:
   Function:
@@ -86,6 +81,8 @@ Resources:
 
   ForgeOSAIBucket:
     Type: AWS::S3::Bucket
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
     Properties:
       BucketName: forgeos-ai-bucket
       WebsiteConfiguration:
