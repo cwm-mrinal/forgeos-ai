@@ -2,10 +2,48 @@
 @tailwind components;
 @tailwind utilities;
 
+/* ─── THEME VARIABLES ─────────────────────────────────────────────────────── */
+
 :root {
   --bg-primary: #020617;
   --bg-secondary: #0f172a;
   --bg-card: #1e293b;
+  --glass-bg: rgba(15, 23, 42, 0.7);
+  --glass-border: rgba(255, 255, 255, 0.07);
+  --border-subtle: rgba(255, 255, 255, 0.06);
+  --text-primary: #f1f5f9;
+  --text-secondary: #94a3b8;
+  --text-muted: #64748b;
+  --progress-track: #1e293b;
+  --scrollbar-track: #0f172a;
+  --scrollbar-thumb: #334155;
+  --shimmer-start: #1e293b;
+  --shimmer-mid: #334155;
+  --orb-opacity: 0.12;
+  --nav-active-bg: rgba(139, 92, 246, 0.12);
+  --schedule-hover: rgba(59, 130, 246, 0.08);
+  --card-lift-shadow: rgba(0, 0, 0, 0.4);
+}
+
+[data-theme="light"] {
+  --bg-primary: #f0f4ff;
+  --bg-secondary: #e8eeff;
+  --bg-card: #ffffff;
+  --glass-bg: rgba(255, 255, 255, 0.82);
+  --glass-border: rgba(99, 102, 200, 0.14);
+  --border-subtle: rgba(0, 0, 0, 0.07);
+  --text-primary: #0f172a;
+  --text-secondary: #475569;
+  --text-muted: #94a3b8;
+  --progress-track: #e2e8f0;
+  --scrollbar-track: #e2e8f0;
+  --scrollbar-thumb: #c1cfe0;
+  --shimmer-start: #e2e8f0;
+  --shimmer-mid: #f1f5f9;
+  --orb-opacity: 0.05;
+  --nav-active-bg: rgba(139, 92, 246, 0.08);
+  --schedule-hover: rgba(59, 130, 246, 0.05);
+  --card-lift-shadow: rgba(0, 0, 0, 0.12);
 }
 
 * { box-sizing: border-box; }
@@ -13,21 +51,23 @@ html { scroll-behavior: smooth; }
 
 body {
   background: var(--bg-primary);
-  color: white;
+  color: var(--text-primary);
   font-family: 'Inter', 'Segoe UI', Arial, sans-serif;
   overflow-x: hidden;
+  transition: background 0.3s ease, color 0.3s ease;
 }
 
 ::-webkit-scrollbar { width: 5px; height: 5px; }
-::-webkit-scrollbar-track { background: #0f172a; }
-::-webkit-scrollbar-thumb { background: #334155; border-radius: 3px; }
+::-webkit-scrollbar-track { background: var(--scrollbar-track); }
+::-webkit-scrollbar-thumb { background: var(--scrollbar-thumb); border-radius: 3px; }
 ::-webkit-scrollbar-thumb:hover { background: #8b5cf6; }
 
 .glass {
-  background: rgba(15, 23, 42, 0.7);
+  background: var(--glass-bg);
   backdrop-filter: blur(24px);
   -webkit-backdrop-filter: blur(24px);
-  border: 1px solid rgba(255,255,255,0.07);
+  border: 1px solid var(--glass-border);
+  transition: background 0.3s ease, border-color 0.3s ease;
 }
 
 .gradient-text {
@@ -38,7 +78,7 @@ body {
 }
 
 .gradient-border {
-  background: linear-gradient(#0f172a, #0f172a) padding-box,
+  background: linear-gradient(var(--bg-secondary), var(--bg-secondary)) padding-box,
               linear-gradient(135deg, #3b82f6, #8b5cf6, #ec4899) border-box;
   border: 1px solid transparent;
 }
@@ -48,9 +88,37 @@ body {
   position: fixed;
   border-radius: 50%;
   filter: blur(80px);
-  opacity: 0.12;
+  opacity: var(--orb-opacity);
   pointer-events: none;
   z-index: 0;
+  transition: opacity 0.5s ease;
+}
+
+/* ─── LIGHT THEME OVERRIDES ────────────────────────────────────────────────── */
+
+[data-theme="light"] .text-white {
+  color: var(--text-primary) !important;
+}
+[data-theme="light"] .text-slate-400 {
+  color: var(--text-secondary) !important;
+}
+[data-theme="light"] .text-slate-500 {
+  color: var(--text-muted) !important;
+}
+[data-theme="light"] .text-slate-300 {
+  color: #374151 !important;
+}
+[data-theme="light"] .text-slate-600 {
+  color: #6b7280 !important;
+}
+[data-theme="light"] .bg-slate-800 {
+  background-color: var(--progress-track) !important;
+}
+[data-theme="light"] .placeholder-slate-500::placeholder {
+  color: #94a3b8;
+}
+[data-theme="light"] .bg-transparent {
+  color: var(--text-primary);
 }
 
 /* Typing dots */
@@ -68,7 +136,7 @@ body {
   100% { background-position: 200% 0; }
 }
 .shimmer {
-  background: linear-gradient(90deg,#1e293b 25%,#334155 50%,#1e293b 75%);
+  background: linear-gradient(90deg, var(--shimmer-start) 25%, var(--shimmer-mid) 50%, var(--shimmer-start) 75%);
   background-size: 200% 100%;
   animation: shimmer 1.5s infinite;
 }
@@ -113,13 +181,13 @@ body {
   border-left: 2px solid transparent;
 }
 .nav-item:hover, .nav-item.active {
-  background: rgba(139,92,246,0.12);
+  background: var(--nav-active-bg);
   border-left-color: #8b5cf6;
 }
 
 /* Card hover lift */
 .card-lift { transition: transform 0.25s ease, box-shadow 0.25s ease; }
-.card-lift:hover { transform: translateY(-6px); box-shadow: 0 20px 60px rgba(0,0,0,0.4); }
+.card-lift:hover { transform: translateY(-6px); box-shadow: 0 20px 60px var(--card-lift-shadow); }
 
 /* Schedule row */
 .schedule-row {
@@ -127,7 +195,7 @@ body {
   border-left: 2px solid transparent;
 }
 .schedule-row:hover {
-  background: rgba(59,130,246,0.08);
+  background: var(--schedule-hover);
   border-left-color: #3b82f6;
   padding-left: 1.25rem;
 }
@@ -165,7 +233,17 @@ body {
   to { opacity: 1; transform: translateY(0); }
 }
 
-/* Prose for AI response */
+/* AI Coach view responsive height */
+.ai-view-height {
+  height: calc(100vh - 120px);
+}
+@media (max-width: 768px) {
+  .ai-view-height {
+    height: calc(100vh - 200px);
+  }
+}
+
+/* Prose for AI response — dark mode */
 .ai-prose p { margin: 0.5rem 0; line-height: 1.75; color: #cbd5e1; }
 .ai-prose h1,.ai-prose h2,.ai-prose h3 { font-weight:700; color:#f1f5f9; margin:0.75rem 0 0.35rem; }
 .ai-prose h1 { font-size:1.15rem; }
@@ -181,3 +259,21 @@ body {
 .ai-prose blockquote { border-left:3px solid #8b5cf6; padding-left:1rem; color:#94a3b8; margin:0.5rem 0; font-style:italic; }
 .ai-prose hr { border-color:#1e293b; margin:0.75rem 0; }
 .ai-prose a { color:#60a5fa; text-decoration:underline; }
+
+/* Prose for AI response — light mode overrides */
+[data-theme="light"] .ai-prose p { color: #374151; }
+[data-theme="light"] .ai-prose h1,
+[data-theme="light"] .ai-prose h2,
+[data-theme="light"] .ai-prose h3 { color: #0f172a; }
+[data-theme="light"] .ai-prose h3 { color: #475569; }
+[data-theme="light"] .ai-prose li { color: #374151; }
+[data-theme="light"] .ai-prose strong { color: #1e293b; }
+[data-theme="light"] .ai-prose pre { background: #f1f5f9; border-color: #e2e8f0; }
+[data-theme="light"] .ai-prose pre code { color: #1e293b; }
+[data-theme="light"] .ai-prose blockquote { color: #64748b; }
+[data-theme="light"] .ai-prose hr { border-color: #e2e8f0; }
+
+/* Mobile bottom nav safe area */
+.mobile-nav {
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}

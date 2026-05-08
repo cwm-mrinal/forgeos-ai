@@ -8,7 +8,7 @@ import {
   Brain, Dumbbell, Car, BarChart3, Calendar, Send, Zap,
   Moon, Sun, Clock, ChevronRight, Activity, Target, Award,
   TrendingUp, Flame, Shield, Cpu, BookOpen, FlaskConical,
-  Play, X, RotateCcw, ChevronDown, Sparkles, Bot
+  Play, X, RotateCcw, ChevronDown, Sparkles, Bot, Menu
 } from 'lucide-react'
 import {
   RadarChart, Radar, PolarGrid, PolarAngleAxis, ResponsiveContainer,
@@ -28,9 +28,10 @@ const SCHEDULES = {
   general: [
     { time: '11:30 PM', end: '6:30 AM', label: 'Deep Sleep', icon: Moon, color: '#6366f1', type: 'sleep' },
     { time: '7:00 AM', end: '8:30 AM', label: 'Gym Session', icon: Dumbbell, color: '#10b981', type: 'gym' },
-    { time: '9:00 AM', end: '9:30 AM', label: 'Leave for Office', icon: Car, color: '#f59e0b', type: 'travel' },
+    { time: '8:30 AM', end: '10:00 AM', label: 'Commute to Office', icon: Car, color: '#f59e0b', type: 'travel' },
     { time: '10:00 AM', end: '7:00 PM', label: 'Office Shift', icon: Zap, color: '#ec4899', type: 'work' },
-    { time: '9:00 PM', end: '10:30 PM', label: 'AWS Study', icon: Cpu, color: '#3b82f6', type: 'study' },
+    { time: '7:30 PM', end: '9:00 PM', label: 'Commute Home', icon: Car, color: '#f59e0b', type: 'travel' },
+    { time: '9:30 PM', end: '11:00 PM', label: 'AWS Study', icon: Cpu, color: '#3b82f6', type: 'study' },
   ]
 }
 
@@ -611,7 +612,7 @@ function DashboardView() {
 // ─── SCHEDULE VIEW ────────────────────────────────────────────────────────────
 
 function ScheduleView() {
-  const [mode, setMode] = useState('evening')
+  const [mode, setMode] = useState('general')
   const schedule = SCHEDULES[mode]
 
   return (
@@ -622,7 +623,7 @@ function ScheduleView() {
       </motion.div>
 
       {/* Toggle */}
-      <div className="flex gap-3">
+      <div className="flex flex-wrap gap-2 md:gap-3">
         {['evening', 'general'].map(m => (
           <button
             key={m}
@@ -742,7 +743,7 @@ function AICoachView() {
   const QUICK = ['Plan my AWS study week', 'Best chest workout for mass', 'Highway driving tips', 'Optimize my evening shift']
 
   return (
-    <div className="flex flex-col h-full" style={{ height: 'calc(100vh - 120px)' }}>
+    <div className="flex flex-col ai-view-height">
       <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} className="mb-4 flex-shrink-0">
         <h1 className="text-3xl font-bold gradient-text">ForgeOS AI Coach</h1>
         <p className="text-slate-400 mt-1">Powered by Claude — your intelligent life co-pilot.</p>
@@ -1019,7 +1020,7 @@ function DevOpsView() {
       </motion.div>
 
       {/* Stats */}
-      <div className="grid grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         <StatCard icon={Target} label="Overall Progress" value="65%" sub="DevOps Pro" color="#f59e0b" delay={0.1} />
         <StatCard icon={BookOpen} label="Topics Done" value="40/72" sub="Modules" color="#3b82f6" delay={0.15} />
         <StatCard icon={Award} label="Mock Score" value="74%" sub="Last Test" color="#10b981" delay={0.2} />
@@ -1099,6 +1100,17 @@ function DevOpsView() {
 export default function Home() {
   const [activeNav, setActiveNav] = useState('dashboard')
   const [sidebarOpen, setSidebarOpen] = useState(true)
+  const [darkMode, setDarkMode] = useState(true)
+
+  useEffect(() => {
+    const saved = localStorage.getItem('forgeos-theme')
+    if (saved === 'light') setDarkMode(false)
+  }, [])
+
+  useEffect(() => {
+    document.documentElement.setAttribute('data-theme', darkMode ? 'dark' : 'light')
+    localStorage.setItem('forgeos-theme', darkMode ? 'dark' : 'light')
+  }, [darkMode])
 
   const views = {
     dashboard: <DashboardView />,
@@ -1110,7 +1122,7 @@ export default function Home() {
   }
 
   return (
-    <div className="min-h-screen relative" style={{ background: '#020617' }}>
+    <div data-theme={darkMode ? 'dark' : 'light'} className="min-h-screen relative" style={{ background: 'var(--bg-primary)', transition: 'background 0.3s ease' }}>
       <BackgroundOrbs />
       <FloatingParticles />
 
@@ -1121,11 +1133,11 @@ export default function Home() {
           initial={{ x: -280 }}
           animate={{ x: 0 }}
           transition={{ duration: 0.4, ease: 'easeOut' }}
-          className="glass flex-shrink-0 flex flex-col"
+          className="glass flex-shrink-0 hidden md:flex flex-col"
           style={{
             width: sidebarOpen ? '240px' : '72px',
             transition: 'width 0.3s ease',
-            borderRight: '1px solid rgba(255,255,255,0.06)',
+            borderRight: '1px solid var(--border-subtle)',
             minHeight: '100vh',
             position: 'sticky',
             top: 0,
@@ -1134,7 +1146,7 @@ export default function Home() {
           }}
         >
           {/* Logo */}
-          <div className="p-5 flex items-center gap-3 flex-shrink-0" style={{ borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
+          <div className="p-5 flex items-center gap-3 flex-shrink-0" style={{ borderBottom: '1px solid var(--border-subtle)' }}>
             <div className="w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0 pulse-glow"
               style={{ background: 'linear-gradient(135deg,#3b82f6,#8b5cf6,#ec4899)' }}>
               <Zap size={18} className="text-white" />
@@ -1173,7 +1185,7 @@ export default function Home() {
           </nav>
 
           {/* Collapse toggle */}
-          <div className="p-3 flex-shrink-0" style={{ borderTop: '1px solid rgba(255,255,255,0.06)' }}>
+          <div className="p-3 flex-shrink-0" style={{ borderTop: '1px solid var(--border-subtle)' }}>
             <button
               onClick={() => setSidebarOpen(!sidebarOpen)}
               className="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-xl text-slate-500 hover:text-slate-300 hover:bg-white/5 transition-all text-xs"
@@ -1185,20 +1197,40 @@ export default function Home() {
         </motion.aside>
 
         {/* ── Main content ── */}
-        <main className="flex-1 overflow-y-auto">
+        <main className="flex-1 overflow-y-auto pb-20 md:pb-0">
           {/* Top bar */}
-          <div className="sticky top-0 z-20 glass px-6 py-4 flex items-center justify-between"
-            style={{ borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
+          <div className="sticky top-0 z-20 glass px-4 py-3 md:px-6 md:py-4 flex items-center justify-between"
+            style={{ borderBottom: '1px solid var(--border-subtle)' }}>
             <div className="flex items-center gap-3">
-              <div className="w-2 h-2 rounded-full bg-emerald-400" style={{ boxShadow: '0 0 8px #10b981' }} />
-              <span className="text-sm text-slate-400">
+              {/* Mobile: show logo instead of status dot */}
+              <div className="md:hidden w-8 h-8 rounded-xl flex items-center justify-center flex-shrink-0 pulse-glow"
+                style={{ background: 'linear-gradient(135deg,#3b82f6,#8b5cf6,#ec4899)' }}>
+                <Zap size={15} className="text-white" />
+              </div>
+              <div className="hidden md:flex w-2 h-2 rounded-full bg-emerald-400" style={{ boxShadow: '0 0 8px #10b981' }} />
+              <span className="text-sm font-semibold md:font-normal text-slate-300 md:text-slate-400">
                 {NAV_ITEMS.find(n => n.id === activeNav)?.label}
               </span>
             </div>
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-2 md:gap-3">
               <div className="text-xs text-slate-500 hidden sm:block">
                 {new Date().toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric', month: 'short' })}
               </div>
+              {/* Dark / Light Mode Toggle */}
+              <button
+                onClick={() => setDarkMode(d => !d)}
+                className="w-8 h-8 rounded-xl flex items-center justify-center transition-all duration-200 hover:scale-110 active:scale-95"
+                style={{
+                  background: darkMode ? 'rgba(139,92,246,0.15)' : 'rgba(251,191,36,0.15)',
+                  border: `1px solid ${darkMode ? 'rgba(139,92,246,0.35)' : 'rgba(251,191,36,0.4)'}`,
+                }}
+                title={darkMode ? 'Switch to Light Mode' : 'Switch to Dark Mode'}
+              >
+                {darkMode
+                  ? <Moon size={14} className="text-purple-400" />
+                  : <Sun size={14} className="text-amber-400" />
+                }
+              </button>
               <div className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold text-white"
                 style={{ background: 'linear-gradient(135deg,#3b82f6,#8b5cf6)' }}>
                 M
@@ -1207,7 +1239,7 @@ export default function Home() {
           </div>
 
           {/* Page content */}
-          <div className="p-6">
+          <div className="p-4 md:p-6">
             <AnimatePresence mode="wait">
               <motion.div
                 key={activeNav}
@@ -1222,6 +1254,34 @@ export default function Home() {
           </div>
         </main>
       </div>
+
+      {/* ── Mobile Bottom Navigation ── */}
+      <nav
+        className="fixed bottom-0 left-0 right-0 z-40 flex md:hidden mobile-nav glass"
+        style={{ borderTop: '1px solid var(--border-subtle)' }}
+      >
+        {NAV_ITEMS.map(item => (
+          <button
+            key={item.id}
+            onClick={() => setActiveNav(item.id)}
+            className="flex-1 flex flex-col items-center py-2.5 gap-0.5 transition-all duration-200"
+          >
+            <item.icon
+              size={19}
+              style={{ color: activeNav === item.id ? '#a78bfa' : 'var(--text-muted)' }}
+            />
+            <span
+              style={{
+                fontSize: '9px',
+                fontWeight: activeNav === item.id ? 600 : 400,
+                color: activeNav === item.id ? '#a78bfa' : 'var(--text-muted)',
+              }}
+            >
+              {item.label}
+            </span>
+          </button>
+        ))}
+      </nav>
     </div>
   )
 }
