@@ -1,21 +1,22 @@
 
 'use client'
 
-import { useState, useRef, useEffect, useCallback } from 'react'
+import { useState, useRef, useEffect, useCallback, createContext, useContext } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import ReactMarkdown from 'react-markdown'
 import {
   Brain, Dumbbell, Car, BarChart3, Calendar, Send, Zap,
   Moon, Sun, Clock, ChevronRight, Activity, Target, Award,
   TrendingUp, Flame, Shield, Cpu, BookOpen, FlaskConical,
-  Play, X, RotateCcw, ChevronDown, Sparkles, Bot, Menu
+  Play, X, RotateCcw, ChevronDown, Sparkles, Bot, Menu,
+  CheckCircle, Plus, Minus, Trophy
 } from 'lucide-react'
 import {
   RadarChart, Radar, PolarGrid, PolarAngleAxis, ResponsiveContainer,
-  AreaChart, Area, XAxis, YAxis, Tooltip, BarChart, Bar
+  AreaChart, Area, XAxis, YAxis, Tooltip, BarChart, Bar, Cell
 } from 'recharts'
 
-// ─── DATA ────────────────────────────────────────────────────────────────────
+// ─── DATA ─────────────────────────────────────────────────────────────────────
 
 const SCHEDULES = {
   evening: [
@@ -86,7 +87,7 @@ const WORKOUTS = [
   }
 ]
 
-const DRIVE_SKILLS = [
+const DRIVE_SKILLS_DEFAULT = [
   { name: 'Traffic Driving', icon: '🚦', level: 72, color: '#f59e0b', tip: 'Maintain 3-second following distance in traffic.' },
   { name: 'Highway Driving', icon: '🛣️', level: 85, color: '#3b82f6', tip: 'Check mirrors every 8-10 seconds on highways.' },
   { name: 'Reverse Parking', icon: '🅿️', level: 60, color: '#ec4899', tip: 'Use reference points on your car for consistent parking.' },
@@ -94,7 +95,7 @@ const DRIVE_SKILLS = [
   { name: 'City Traffic', icon: '🏙️', level: 78, color: '#8b5cf6', tip: 'Anticipate 3 cars ahead, not just the one in front.' },
 ]
 
-const DEVOPS_MODULES = [
+const DEVOPS_MODULES_DEFAULT = [
   { name: 'AWS DevOps Pro', icon: Shield, color: '#f59e0b', progress: 65, topics: 24, done: 16 },
   { name: 'Mock Tests', icon: Target, color: '#3b82f6', progress: 40, topics: 10, done: 4 },
   { name: 'Labs Tracker', icon: FlaskConical, color: '#10b981', progress: 55, topics: 18, done: 10 },
@@ -122,6 +123,191 @@ const NAV_ITEMS = [
   { id: 'devops', label: 'DevOps', icon: Cpu },
 ]
 
+// ─── UTILITIES ────────────────────────────────────────────────────────────────
+
+function parseScheduleTime(str) {
+  const [time, period] = str.split(' ')
+  let [h, m] = time.split(':').map(Number)
+  if (period === 'PM' && h !== 12) h += 12
+  if (period === 'AM' && h === 12) h = 0
+  return h * 60 + m
+}
+
+function isCurrentlyActive(startStr, endStr, now) {
+  const start = parseScheduleTime(startStr)
+  const end = parseScheduleTime(endStr)
+  const cur = now.getHours() * 60 + now.getMinutes()
+  return end < start ? cur >= start || cur < end : cur >= start && cur < end
+}
+
+function getGreeting(h) {
+  if (h >= 5 && h < 12) return 'Good Morning'
+  if (h >= 12 && h < 17) return 'Good Afternoon'
+  if (h >= 17 && h < 21) return 'Good Evening'
+  return 'Good Night'
+}
+
+function getGreetingEmoji(h) {
+  if (h >= 5 && h < 12) return '🌅'
+  if (h >= 12 && h < 17) return '☀️'
+  if (h >= 17 && h < 21) return '🌆'
+  return '🌙'
+}
+
+function getTodayKey() {
+  const d = new Date()
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+}
+
+function getDateKey(daysAgo) {
+  const d = new Date()
+  d.setDate(d.getDate() - daysAgo)
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+}
+
+function safeLocalGet(key, fallback) {
+  if (typeof window === 'undefined') return fallback
+  try { return JSON.parse(localStorage.getItem(key) ?? 'null') ?? fallback }
+  catch { return fallback }
+}
+
+function safeLocalSet(key, val) {
+  if (typeof window === 'undefined') return
+  try { localStorage.setItem(key, JSON.stringify(val)) } catch {}
+}
+
+// ─── TOAST CONTEXT ────────────────────────────────────────────────────────────
+
+const ToastContext = createContext(null)
+const useToast = () => useContext(ToastContext)
+
+// ─── HOOKS ────────────────────────────────────────────────────────────────────
+
+function useCurrentTime() {
+  const [time, setTime] = useState(() => new Date())
+  useEffect(() => {
+    const id = setInterval(() => setTime(new Date()), 1000)
+    return () => clearInterval(id)
+  }, [])
+  return time
+}
+
+// ─── COUNT UP ─────────────────────────────────────────────────────────────────
+
+function CountUp({ end, duration = 1400, prefix = '', suffix = '' }) {
+  const [val, setVal] = useState(0)
+  const startRef = useRef(null)
+  useEffect(() => {
+    startRef.current = null
+    const animate = (ts) => {
+      if (!startRef.current) startRef.current = ts
+      const p = Math.min((ts - startRef.current) / duration, 1)
+      setVal(Math.floor((1 - Math.pow(1 - p, 3)) * end))
+      if (p < 1) requestAnimationFrame(animate)
+      else setVal(end)
+    }
+    requestAnimationFrame(animate)
+  }, [end, duration])
+  return <>{prefix}{val.toLocaleString()}{suffix}</>
+}
+
+// ─── TOAST CONTAINER ─────────────────────────────────────────────────────────
+
+function ToastContainer({ toasts }) {
+  return (
+    <div className="fixed top-4 right-4 z-[60] flex flex-col gap-2 pointer-events-none">
+      <AnimatePresence>
+        {toasts.map(t => (
+          <motion.div
+            key={t.id}
+            initial={{ opacity: 0, x: 60, scale: 0.85 }}
+            animate={{ opacity: 1, x: 0, scale: 1 }}
+            exit={{ opacity: 0, x: 60, scale: 0.85 }}
+            transition={{ type: 'spring', stiffness: 300, damping: 25 }}
+            className="glass rounded-xl px-4 py-3 flex items-center gap-3 pointer-events-auto shadow-2xl"
+            style={{ border: `1px solid ${t.color || '#8b5cf6'}50`, minWidth: '220px', maxWidth: '320px' }}
+          >
+            <div className="w-2 h-2 rounded-full flex-shrink-0 animate-pulse" style={{ background: t.color || '#8b5cf6' }} />
+            <span className="text-sm" style={{ color: 'var(--text-primary)' }}>{t.msg}</span>
+          </motion.div>
+        ))}
+      </AnimatePresence>
+    </div>
+  )
+}
+
+// ─── LIVE CLOCK ───────────────────────────────────────────────────────────────
+
+function LiveClock() {
+  const time = useCurrentTime()
+  return (
+    <span className="text-xs font-mono text-slate-400 hidden sm:block tabular-nums tracking-wide">
+      {time.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true })}
+    </span>
+  )
+}
+
+// ─── CURRENT ACTIVITY WIDGET ─────────────────────────────────────────────────
+
+function CurrentActivityWidget() {
+  const now = useCurrentTime()
+  const shiftMode = safeLocalGet('forgeos-shift', 'general')
+  const schedule = SCHEDULES[shiftMode] || SCHEDULES.general
+  const currentActivity = schedule.find(item => isCurrentlyActive(item.time, item.end, now))
+
+  const commonTime = (
+    <div className="text-right flex-shrink-0">
+      <p className="text-lg font-mono font-bold text-white tabular-nums">
+        {now.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true })}
+      </p>
+      <p className="text-xs text-slate-500">Current Time</p>
+    </div>
+  )
+
+  if (!currentActivity) {
+    return (
+      <motion.div
+        initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.05 }}
+        className="glass rounded-2xl p-4 flex items-center gap-4"
+        style={{ border: '1px solid rgba(99,102,241,0.3)' }}
+      >
+        <div className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0"
+          style={{ background: 'rgba(99,102,241,0.15)', border: '2px solid rgba(99,102,241,0.4)' }}>
+          <Sparkles size={18} style={{ color: '#6366f1' }} />
+        </div>
+        <div className="flex-1 min-w-0">
+          <p className="text-xs font-medium text-slate-400 uppercase tracking-wide">Schedule Status</p>
+          <p className="font-semibold text-white text-sm">Free Time 🎉</p>
+          <p className="text-xs text-slate-500">No active block right now</p>
+        </div>
+        {commonTime}
+      </motion.div>
+    )
+  }
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.05 }}
+      className="glass rounded-2xl p-4 flex items-center gap-4"
+      style={{ border: `1px solid ${currentActivity.color}40`, background: `${currentActivity.color}06` }}
+    >
+      <div className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 pulse-glow"
+        style={{ background: `${currentActivity.color}20`, border: `2px solid ${currentActivity.color}60` }}>
+        <currentActivity.icon size={18} style={{ color: currentActivity.color }} />
+      </div>
+      <div className="flex-1 min-w-0">
+        <div className="flex items-center gap-2 mb-0.5">
+          <div className="w-1.5 h-1.5 rounded-full animate-pulse" style={{ background: currentActivity.color }} />
+          <span className="text-xs font-bold tracking-widest uppercase" style={{ color: currentActivity.color }}>Now Active</span>
+        </div>
+        <p className="font-semibold text-white text-sm truncate">{currentActivity.label}</p>
+        <p className="text-xs text-slate-500">{currentActivity.time} → {currentActivity.end}</p>
+      </div>
+      {commonTime}
+    </motion.div>
+  )
+}
+
 // ─── EXERCISE ANIMATION COMPONENT ────────────────────────────────────────────
 
 function ExerciseDemo({ workout, onClose }) {
@@ -133,7 +319,6 @@ function ExerciseDemo({ workout, onClose }) {
       phases: ['Starting Position', 'Lower the Bar', 'Press Up', 'Lock Out'],
       colors: ['#ef4444', '#f97316', '#ef4444', '#dc2626'],
       svgFrames: [
-        // Frame 0 - top position
         <g key="c0">
           <rect x="60" y="80" width="80" height="12" rx="6" fill="#94a3b8"/>
           <circle cx="55" cy="86" r="10" fill="#ef4444" opacity="0.8"/>
@@ -143,7 +328,6 @@ function ExerciseDemo({ workout, onClose }) {
           <line x1="100" y1="115" x2="75" y2="135" stroke="#60a5fa" strokeWidth="3"/>
           <line x1="100" y1="115" x2="125" y2="135" stroke="#60a5fa" strokeWidth="3"/>
         </g>,
-        // Frame 1 - lowered
         <g key="c1">
           <rect x="60" y="105" width="80" height="12" rx="6" fill="#94a3b8"/>
           <circle cx="55" cy="111" r="10" fill="#ef4444" opacity="0.8"/>
@@ -331,7 +515,6 @@ function ExerciseDemo({ workout, onClose }) {
           </div>
         </div>
 
-        {/* SVG Animation */}
         <div className="relative rounded-2xl overflow-hidden mb-6" style={{ background: 'rgba(15,23,42,0.8)', border: `1px solid ${workout.color}30` }}>
           <div className="scan-line" style={{ background: `linear-gradient(90deg, transparent, ${workout.color}, transparent)` }} />
           <svg viewBox="0 0 200 200" className="w-full h-48">
@@ -354,8 +537,6 @@ function ExerciseDemo({ workout, onClose }) {
               </motion.g>
             </AnimatePresence>
           </svg>
-
-          {/* Phase indicator */}
           <div className="absolute bottom-3 left-0 right-0 flex justify-center gap-2">
             {anim.phases.map((p, i) => (
               <div
@@ -370,7 +551,6 @@ function ExerciseDemo({ workout, onClose }) {
           </div>
         </div>
 
-        {/* Phase label */}
         <div className="text-center mb-5">
           <motion.p
             key={phase}
@@ -384,7 +564,6 @@ function ExerciseDemo({ workout, onClose }) {
           <p className="text-slate-500 text-sm mt-1">Rep {Math.max(1, rep)} in progress</p>
         </div>
 
-        {/* Muscles */}
         <div className="flex flex-wrap gap-2 mb-4">
           {workout.muscles.map(m => (
             <span key={m} className="text-xs px-3 py-1 rounded-full" style={{ background: `${workout.color}20`, color: workout.color }}>
@@ -393,7 +572,6 @@ function ExerciseDemo({ workout, onClose }) {
           ))}
         </div>
 
-        {/* Exercises */}
         <div className="grid grid-cols-2 gap-2 mb-4">
           {workout.exercises.map((ex, i) => (
             <div key={i} className="flex items-center gap-2 text-sm text-slate-300">
@@ -403,7 +581,6 @@ function ExerciseDemo({ workout, onClose }) {
           ))}
         </div>
 
-        {/* Tip */}
         <div className="rounded-xl p-3 text-sm text-slate-300" style={{ background: `${workout.color}10`, border: `1px solid ${workout.color}20` }}>
           <span style={{ color: workout.color }}>💡 Pro Tip: </span>{workout.tip}
         </div>
@@ -412,7 +589,7 @@ function ExerciseDemo({ workout, onClose }) {
   )
 }
 
-// ─── BACKGROUND ORBS (React Bits style) ──────────────────────────────────────
+// ─── BACKGROUND ORBS ─────────────────────────────────────────────────────────
 
 function BackgroundOrbs() {
   return (
@@ -439,7 +616,7 @@ function BackgroundOrbs() {
   )
 }
 
-// ─── FLOATING PARTICLES (React Bits style) ───────────────────────────────────
+// ─── FLOATING PARTICLES ──────────────────────────────────────────────────────
 
 function FloatingParticles() {
   const particles = Array.from({ length: 20 }, (_, i) => ({
@@ -509,24 +686,29 @@ function TypingIndicator() {
 // ─── DASHBOARD VIEW ───────────────────────────────────────────────────────────
 
 function DashboardView() {
+  const [greeting] = useState(() => getGreeting(new Date().getHours()))
+  const [greetingEmoji] = useState(() => getGreetingEmoji(new Date().getHours()))
+
   return (
     <div className="space-y-6">
       <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }}>
-        <h1 className="text-3xl font-bold gradient-text">Good Evening, Mrinal 👋</h1>
+        <h1 className="text-3xl font-bold gradient-text">{greeting}, Mrinal {greetingEmoji}</h1>
         <p className="text-slate-400 mt-1">Your ForgeOS AI dashboard — everything in one place.</p>
       </motion.div>
 
-      {/* Stats row */}
+      {/* Live Current Activity */}
+      <CurrentActivityWidget />
+
+      {/* Stats row with animated count-up */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <StatCard icon={Flame} label="Calories Burned" value="2,840" sub="Today" color="#ef4444" delay={0.1} />
-        <StatCard icon={Clock} label="Study Hours" value="12.5h" sub="This Week" color="#3b82f6" delay={0.15} />
-        <StatCard icon={Award} label="AWS Progress" value="65%" sub="DevOps Pro" color="#f59e0b" delay={0.2} />
-        <StatCard icon={TrendingUp} label="Streak" value="14 days" sub="Active" color="#10b981" delay={0.25} />
+        <StatCard icon={Flame} label="Calories Burned" value={<CountUp end={2840} />} sub="Today" color="#ef4444" delay={0.1} />
+        <StatCard icon={Clock} label="Study Hours" value={<><CountUp end={12} />{'h'}</>} sub="This Week" color="#3b82f6" delay={0.15} />
+        <StatCard icon={Award} label="AWS Progress" value={<><CountUp end={65} />{'%'}</>} sub="DevOps Pro" color="#f59e0b" delay={0.2} />
+        <StatCard icon={TrendingUp} label="Streak" value={<><CountUp end={14} />{' days'}</>} sub="Active" color="#10b981" delay={0.25} />
       </div>
 
       {/* Charts row */}
       <div className="grid lg:grid-cols-2 gap-6">
-        {/* Study hours chart */}
         <motion.div
           initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 0.3 }}
           className="glass rounded-2xl p-6"
@@ -554,7 +736,6 @@ function DashboardView() {
           </ResponsiveContainer>
         </motion.div>
 
-        {/* Fitness radar */}
         <motion.div
           initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 0.35 }}
           className="glass rounded-2xl p-6"
@@ -583,7 +764,7 @@ function DashboardView() {
           <h3 className="font-semibold text-white">AWS DevOps Pro — Module Progress</h3>
         </div>
         <div className="space-y-4">
-          {DEVOPS_MODULES.map((m, i) => (
+          {DEVOPS_MODULES_DEFAULT.map((m, i) => (
             <motion.div key={m.name} initial={{ opacity: 0, x: -10 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 0.45 + i * 0.05 }}>
               <div className="flex items-center justify-between mb-1.5">
                 <div className="flex items-center gap-2">
@@ -612,8 +793,14 @@ function DashboardView() {
 // ─── SCHEDULE VIEW ────────────────────────────────────────────────────────────
 
 function ScheduleView() {
-  const [mode, setMode] = useState('general')
+  const [mode, setMode] = useState(() => safeLocalGet('forgeos-shift', 'general'))
+  const now = useCurrentTime()
   const schedule = SCHEDULES[mode]
+
+  const setModeAndSave = (m) => {
+    setMode(m)
+    safeLocalSet('forgeos-shift', m)
+  }
 
   return (
     <div className="space-y-6">
@@ -627,7 +814,7 @@ function ScheduleView() {
         {['evening', 'general'].map(m => (
           <button
             key={m}
-            onClick={() => setMode(m)}
+            onClick={() => setModeAndSave(m)}
             className="px-5 py-2.5 rounded-xl text-sm font-medium transition-all duration-200"
             style={mode === m
               ? { background: 'linear-gradient(135deg,#3b82f6,#8b5cf6)', color: 'white', boxShadow: '0 0 20px rgba(139,92,246,0.4)' }
@@ -643,31 +830,52 @@ function ScheduleView() {
       <div className="relative">
         <div className="absolute left-8 top-0 bottom-0 w-px bg-gradient-to-b from-blue-500/50 via-purple-500/50 to-transparent" />
         <div className="space-y-3 stagger">
-          {schedule.map((item, i) => (
-            <motion.div
-              key={`${mode}-${i}`}
-              initial={{ opacity: 0, x: -20 }}
-              animate={{ opacity: 1, x: 0 }}
-              transition={{ delay: i * 0.08 }}
-              className="flex items-center gap-4 pl-4 schedule-row rounded-xl p-3 cursor-default"
-            >
-              {/* Dot */}
-              <div className="relative z-10 w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0"
-                style={{ background: `${item.color}20`, border: `2px solid ${item.color}60` }}>
-                <item.icon size={14} style={{ color: item.color }} />
-              </div>
-
-              <div className="flex-1 glass rounded-xl p-4" style={{ border: `1px solid ${item.color}15` }}>
-                <div className="flex items-center justify-between">
-                  <p className="font-semibold text-white">{item.label}</p>
-                  <span className="text-xs px-2 py-1 rounded-lg" style={{ background: `${item.color}15`, color: item.color }}>
-                    {item.time}
-                  </span>
+          {schedule.map((item, i) => {
+            const isActive = isCurrentlyActive(item.time, item.end, now)
+            return (
+              <motion.div
+                key={`${mode}-${i}`}
+                initial={{ opacity: 0, x: -20 }}
+                animate={{ opacity: 1, x: 0 }}
+                transition={{ delay: i * 0.08 }}
+                className="flex items-center gap-4 pl-4 schedule-row rounded-xl p-3 cursor-default"
+                style={isActive ? { background: `${item.color}0d`, borderLeft: `3px solid ${item.color}` } : {}}
+              >
+                {/* Dot */}
+                <div
+                  className="relative z-10 w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0"
+                  style={{
+                    background: isActive ? `${item.color}30` : `${item.color}20`,
+                    border: `2px solid ${isActive ? item.color : item.color + '60'}`,
+                    boxShadow: isActive ? `0 0 12px ${item.color}60` : 'none'
+                  }}
+                >
+                  <item.icon size={14} style={{ color: item.color }} />
                 </div>
-                <p className="text-xs text-slate-500 mt-1">{item.time} → {item.end}</p>
-              </div>
-            </motion.div>
-          ))}
+
+                <div className="flex-1 glass rounded-xl p-4" style={{ border: `1px solid ${item.color}${isActive ? '30' : '15'}` }}>
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <p className="font-semibold text-white">{item.label}</p>
+                      {isActive && (
+                        <motion.span
+                          initial={{ scale: 0 }} animate={{ scale: 1 }}
+                          className="text-xs px-2 py-0.5 rounded-full font-bold"
+                          style={{ background: `${item.color}25`, color: item.color }}
+                        >
+                          ● LIVE
+                        </motion.span>
+                      )}
+                    </div>
+                    <span className="text-xs px-2 py-1 rounded-lg" style={{ background: `${item.color}15`, color: item.color }}>
+                      {item.time}
+                    </span>
+                  </div>
+                  <p className="text-xs text-slate-500 mt-1">{item.time} → {item.end}</p>
+                </div>
+              </motion.div>
+            )
+          })}
         </div>
       </div>
 
@@ -686,7 +894,7 @@ function ScheduleView() {
             <Tooltip contentStyle={{ background: '#1e293b', border: '1px solid #334155', borderRadius: '8px', color: '#e2e8f0' }} />
             <Bar dataKey="hours" radius={[4, 4, 0, 0]}>
               {schedule.map((s, i) => (
-                <rect key={i} fill={s.color} />
+                <Cell key={i} fill={s.color} />
               ))}
             </Bar>
           </BarChart>
@@ -782,11 +990,7 @@ function AICoachView() {
               )}
 
               <div
-                className={`max-w-[80%] rounded-2xl px-4 py-3 ${
-                  msg.role === 'user'
-                    ? 'rounded-tr-sm text-white'
-                    : 'rounded-tl-sm'
-                }`}
+                className={`max-w-[80%] rounded-2xl px-4 py-3 ${msg.role === 'user' ? 'rounded-tr-sm text-white' : 'rounded-tl-sm'}`}
                 style={msg.role === 'user'
                   ? { background: 'linear-gradient(135deg,#3b82f6,#8b5cf6)' }
                   : { background: 'rgba(30,41,59,0.7)', border: '1px solid rgba(255,255,255,0.06)' }
@@ -847,13 +1051,71 @@ function AICoachView() {
 // ─── FITNESS VIEW ─────────────────────────────────────────────────────────────
 
 function FitnessView() {
+  const addToast = useToast()
   const [selected, setSelected] = useState(null)
+  const [doneToday, setDoneToday] = useState(() => safeLocalGet(`forgeos-workout-${getTodayKey()}`, []))
+
+  const weekLog = Array.from({ length: 7 }, (_, i) => {
+    const key = `forgeos-workout-${getDateKey(6 - i)}`
+    const done = safeLocalGet(key, [])
+    const d = new Date(); d.setDate(d.getDate() - (6 - i))
+    return { day: ['S', 'M', 'T', 'W', 'T', 'F', 'S'][d.getDay()], count: done.length, isToday: i === 6 }
+  })
+
+  const logWorkout = (workoutId) => {
+    if (doneToday.includes(workoutId)) return
+    const updated = [...doneToday, workoutId]
+    setDoneToday(updated)
+    safeLocalSet(`forgeos-workout-${getTodayKey()}`, updated)
+    const w = WORKOUTS.find(w => w.id === workoutId)
+    addToast?.(`💪 ${w?.name} logged! +${w?.calories} kcal`, '#10b981')
+  }
+
+  const totalCalories = doneToday.reduce((sum, id) => {
+    const w = WORKOUTS.find(w => w.id === id)
+    return sum + (w?.calories || 0)
+  }, 0)
 
   return (
     <div className="space-y-6">
       <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }}>
         <h1 className="text-3xl font-bold gradient-text">ForgeOS Fitness</h1>
         <p className="text-slate-400 mt-1">Click any workout to see the exercise animation and demo.</p>
+      </motion.div>
+
+      {/* 7-day workout streak */}
+      <motion.div
+        initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.05 }}
+        className="glass rounded-2xl p-4 flex items-center gap-4 flex-wrap"
+        style={{ border: '1px solid rgba(16,185,129,0.25)' }}
+      >
+        <div className="flex items-center gap-2">
+          <Trophy size={16} className="text-amber-400" />
+          <span className="text-sm font-semibold text-white">Weekly Activity</span>
+        </div>
+        <div className="flex gap-2 flex-1 justify-center">
+          {weekLog.map((day, i) => (
+            <div key={i} className="flex flex-col items-center gap-1">
+              <div
+                className="w-8 h-8 rounded-lg flex items-center justify-center text-xs font-bold transition-all"
+                style={{
+                  background: day.count > 0 ? 'rgba(16,185,129,0.25)' : day.isToday ? 'rgba(139,92,246,0.15)' : 'rgba(30,41,59,0.6)',
+                  border: `1px solid ${day.count > 0 ? '#10b98160' : day.isToday ? '#8b5cf640' : 'rgba(255,255,255,0.06)'}`,
+                  color: day.count > 0 ? '#10b981' : day.isToday ? '#a78bfa' : '#475569'
+                }}
+              >
+                {day.count > 0 ? '✓' : day.day}
+              </div>
+              <span className="text-xs text-slate-600">{day.day}</span>
+            </div>
+          ))}
+        </div>
+        {doneToday.length > 0 && (
+          <div className="text-right">
+            <p className="text-sm font-bold" style={{ color: '#10b981' }}>{totalCalories} kcal</p>
+            <p className="text-xs text-slate-500">Today</p>
+          </div>
+        )}
       </motion.div>
 
       {/* Radar chart */}
@@ -876,36 +1138,68 @@ function FitnessView() {
 
       {/* Workout cards */}
       <div className="grid grid-cols-2 lg:grid-cols-3 gap-4">
-        {WORKOUTS.map((w, i) => (
-          <motion.button
-            key={w.id}
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.15 + i * 0.07 }}
-            onClick={() => setSelected(w)}
-            className="workout-card glass rounded-2xl p-5 text-left"
-            style={{ border: `1px solid ${w.color}20` }}
-          >
-            <div className="flex items-start justify-between mb-3">
-              <span className="text-3xl">{w.icon}</span>
-              <div className="flex items-center gap-1 text-xs px-2 py-1 rounded-lg" style={{ background: `${w.color}15`, color: w.color }}>
-                <Flame size={10} /> {w.calories}
+        {WORKOUTS.map((w, i) => {
+          const isDone = doneToday.includes(w.id)
+          return (
+            <motion.div
+              key={w.id}
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.15 + i * 0.07 }}
+              className="workout-card glass rounded-2xl p-5 text-left relative overflow-hidden"
+              style={{ border: `1px solid ${isDone ? w.color + '60' : w.color + '20'}` }}
+            >
+              {isDone && (
+                <div className="absolute top-2 right-2">
+                  <CheckCircle size={16} style={{ color: w.color }} />
+                </div>
+              )}
+              <button
+                onClick={() => setSelected(w)}
+                className="w-full text-left"
+              >
+                <div className="flex items-start justify-between mb-3">
+                  <span className="text-3xl">{w.icon}</span>
+                  <div className="flex items-center gap-1 text-xs px-2 py-1 rounded-lg" style={{ background: `${w.color}15`, color: w.color }}>
+                    <Flame size={10} /> {w.calories}
+                  </div>
+                </div>
+                <p className="font-semibold text-white text-sm mb-1">{w.name}</p>
+                <p className="text-xs text-slate-500 mb-3">{w.sets} · {w.rest} rest</p>
+                <div className="flex flex-wrap gap-1 mb-3">
+                  {w.muscles.slice(0, 2).map(m => (
+                    <span key={m} className="text-xs px-2 py-0.5 rounded-md" style={{ background: `${w.color}10`, color: `${w.color}cc` }}>
+                      {m}
+                    </span>
+                  ))}
+                </div>
+              </button>
+
+              <div className="flex items-center gap-2 mt-1">
+                <button
+                  onClick={() => setSelected(w)}
+                  className="flex items-center gap-1 text-xs flex-1"
+                  style={{ color: w.color }}
+                >
+                  <Play size={10} /> View Demo
+                </button>
+                <motion.button
+                  onClick={() => logWorkout(w.id)}
+                  disabled={isDone}
+                  whileHover={!isDone ? { scale: 1.05 } : {}}
+                  whileTap={!isDone ? { scale: 0.95 } : {}}
+                  className="text-xs px-2.5 py-1 rounded-lg font-medium transition-all"
+                  style={isDone
+                    ? { background: `${w.color}20`, color: w.color, opacity: 0.8 }
+                    : { background: `${w.color}15`, color: w.color, border: `1px solid ${w.color}30` }
+                  }
+                >
+                  {isDone ? '✓ Done' : '+ Log'}
+                </motion.button>
               </div>
-            </div>
-            <p className="font-semibold text-white text-sm mb-1">{w.name}</p>
-            <p className="text-xs text-slate-500 mb-3">{w.sets} · {w.rest} rest</p>
-            <div className="flex flex-wrap gap-1">
-              {w.muscles.slice(0, 2).map(m => (
-                <span key={m} className="text-xs px-2 py-0.5 rounded-md" style={{ background: `${w.color}10`, color: `${w.color}cc` }}>
-                  {m}
-                </span>
-              ))}
-            </div>
-            <div className="mt-3 flex items-center gap-1 text-xs" style={{ color: w.color }}>
-              <Play size={10} /> View Demo
-            </div>
-          </motion.button>
-        ))}
+            </motion.div>
+          )
+        })}
       </div>
 
       <AnimatePresence>
@@ -918,18 +1212,50 @@ function FitnessView() {
 // ─── DRIVE VIEW ───────────────────────────────────────────────────────────────
 
 function DriveView() {
+  const addToast = useToast()
+  const [skills, setSkills] = useState(() => safeLocalGet('forgeos-drive-skills', DRIVE_SKILLS_DEFAULT))
   const [active, setActive] = useState(null)
+
+  const adjustSkill = (idx, delta) => {
+    setSkills(prev => {
+      const updated = prev.map((s, i) => i === idx
+        ? { ...s, level: Math.max(0, Math.min(100, s.level + delta)) }
+        : s
+      )
+      safeLocalSet('forgeos-drive-skills', updated)
+      const newLevel = Math.max(0, Math.min(100, prev[idx].level + delta))
+      addToast?.(`${prev[idx].name} → ${newLevel}%`, prev[idx].color)
+      return updated
+    })
+  }
+
+  const resetSkills = () => {
+    setSkills(DRIVE_SKILLS_DEFAULT)
+    safeLocalSet('forgeos-drive-skills', DRIVE_SKILLS_DEFAULT)
+    addToast?.('Driving skills reset to defaults', '#94a3b8')
+  }
 
   return (
     <div className="space-y-6">
       <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }}>
-        <h1 className="text-3xl font-bold gradient-text">ForgeOS Drive</h1>
-        <p className="text-slate-400 mt-1">Master every driving scenario with guided skill tracking.</p>
+        <div className="flex items-start justify-between">
+          <div>
+            <h1 className="text-3xl font-bold gradient-text">ForgeOS Drive</h1>
+            <p className="text-slate-400 mt-1">Master every driving scenario with guided skill tracking.</p>
+          </div>
+          <button
+            onClick={resetSkills}
+            className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-xl text-slate-400 hover:text-slate-300 transition-all mt-1"
+            style={{ background: 'rgba(30,41,59,0.6)', border: '1px solid rgba(255,255,255,0.06)' }}
+          >
+            <RotateCcw size={11} /> Reset
+          </button>
+        </div>
       </motion.div>
 
       {/* Skill bars */}
       <div className="space-y-4">
-        {DRIVE_SKILLS.map((skill, i) => (
+        {skills.map((skill, i) => (
           <motion.div
             key={skill.name}
             initial={{ opacity: 0, x: -20 }}
@@ -960,15 +1286,14 @@ function DriveView() {
             {/* Progress bar */}
             <div className="h-2 bg-slate-800 rounded-full overflow-hidden">
               <motion.div
-                initial={{ width: 0 }}
                 animate={{ width: `${skill.level}%` }}
-                transition={{ delay: i * 0.08 + 0.2, duration: 0.8, ease: 'easeOut' }}
+                transition={{ duration: 0.4, ease: 'easeOut' }}
                 className="h-full rounded-full"
                 style={{ background: `linear-gradient(90deg, ${skill.color}80, ${skill.color})` }}
               />
             </div>
 
-            {/* Expanded tip */}
+            {/* Expanded tip + controls */}
             <AnimatePresence>
               {active === i && (
                 <motion.div
@@ -977,9 +1302,32 @@ function DriveView() {
                   exit={{ opacity: 0, height: 0 }}
                   className="overflow-hidden"
                 >
-                  <div className="mt-4 rounded-xl p-3 text-sm text-slate-300"
+                  <div className="mt-4 rounded-xl p-3 text-sm text-slate-300 mb-3"
                     style={{ background: `${skill.color}10`, border: `1px solid ${skill.color}20` }}>
                     <span style={{ color: skill.color }}>💡 Tip: </span>{skill.tip}
+                  </div>
+                  {/* Level adjuster */}
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs text-slate-500">Adjust skill level:</span>
+                    <div className="flex items-center gap-2">
+                      <motion.button
+                        onClick={(e) => { e.stopPropagation(); adjustSkill(i, -5) }}
+                        whileHover={{ scale: 1.1 }} whileTap={{ scale: 0.9 }}
+                        className="w-8 h-8 rounded-lg flex items-center justify-center transition-all"
+                        style={{ background: 'rgba(239,68,68,0.15)', border: '1px solid rgba(239,68,68,0.3)', color: '#ef4444' }}
+                      >
+                        <Minus size={13} />
+                      </motion.button>
+                      <span className="text-sm font-bold w-12 text-center" style={{ color: skill.color }}>{skill.level}%</span>
+                      <motion.button
+                        onClick={(e) => { e.stopPropagation(); adjustSkill(i, 5) }}
+                        whileHover={{ scale: 1.1 }} whileTap={{ scale: 0.9 }}
+                        className="w-8 h-8 rounded-lg flex items-center justify-center transition-all"
+                        style={{ background: `${skill.color}15`, border: `1px solid ${skill.color}30`, color: skill.color }}
+                      >
+                        <Plus size={13} />
+                      </motion.button>
+                    </div>
                   </div>
                 </motion.div>
               )}
@@ -997,11 +1345,15 @@ function DriveView() {
           <BarChart3 size={16} className="text-amber-400" /> Skill Comparison
         </h3>
         <ResponsiveContainer width="100%" height={140}>
-          <BarChart data={DRIVE_SKILLS} layout="vertical">
+          <BarChart data={skills} layout="vertical">
             <XAxis type="number" domain={[0, 100]} tick={{ fill: '#64748b', fontSize: 10 }} axisLine={false} tickLine={false} />
             <YAxis type="category" dataKey="name" tick={{ fill: '#94a3b8', fontSize: 11 }} axisLine={false} tickLine={false} width={110} />
             <Tooltip contentStyle={{ background: '#1e293b', border: '1px solid #334155', borderRadius: '8px', color: '#e2e8f0' }} />
-            <Bar dataKey="level" radius={[0, 4, 4, 0]} fill="#f59e0b" />
+            <Bar dataKey="level" radius={[0, 4, 4, 0]}>
+              {skills.map((s, i) => (
+                <Cell key={i} fill={s.color} />
+              ))}
+            </Bar>
           </BarChart>
         </ResponsiveContainer>
       </motion.div>
@@ -1012,60 +1364,119 @@ function DriveView() {
 // ─── DEVOPS VIEW ──────────────────────────────────────────────────────────────
 
 function DevOpsView() {
+  const addToast = useToast()
+  const [modules, setModules] = useState(() => safeLocalGet('forgeos-devops', DEVOPS_MODULES_DEFAULT))
+
+  const markTopicDone = (idx) => {
+    setModules(prev => {
+      const m = prev[idx]
+      if (m.done >= m.topics) {
+        addToast?.(`${m.name} is already complete! 🎉`, m.color)
+        return prev
+      }
+      const done = m.done + 1
+      const progress = Math.round((done / m.topics) * 100)
+      const updated = prev.map((item, i) => i === idx ? { ...item, done, progress } : item)
+      safeLocalSet('forgeos-devops', updated)
+      if (done === m.topics) {
+        addToast?.(`🏆 ${m.name} COMPLETE!`, m.color)
+      } else {
+        addToast?.(`✅ ${m.name}: ${done}/${m.topics} topics`, m.color)
+      }
+      return updated
+    })
+  }
+
+  const resetModules = () => {
+    setModules(DEVOPS_MODULES_DEFAULT)
+    safeLocalSet('forgeos-devops', DEVOPS_MODULES_DEFAULT)
+    addToast?.('DevOps modules reset', '#94a3b8')
+  }
+
+  const totalDone = modules.reduce((s, m) => s + m.done, 0)
+  const totalTopics = modules.reduce((s, m) => s + m.topics, 0)
+  const overallProgress = Math.round((totalDone / totalTopics) * 100)
+
   return (
     <div className="space-y-6">
       <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }}>
-        <h1 className="text-3xl font-bold gradient-text">ForgeOS DevOps</h1>
-        <p className="text-slate-400 mt-1">AWS DevOps Pro certification tracker and study planner.</p>
+        <div className="flex items-start justify-between">
+          <div>
+            <h1 className="text-3xl font-bold gradient-text">ForgeOS DevOps</h1>
+            <p className="text-slate-400 mt-1">AWS DevOps Pro certification tracker and study planner.</p>
+          </div>
+          <button
+            onClick={resetModules}
+            className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-xl text-slate-400 hover:text-slate-300 transition-all mt-1"
+            style={{ background: 'rgba(30,41,59,0.6)', border: '1px solid rgba(255,255,255,0.06)' }}
+          >
+            <RotateCcw size={11} /> Reset
+          </button>
+        </div>
       </motion.div>
 
       {/* Stats */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        <StatCard icon={Target} label="Overall Progress" value="65%" sub="DevOps Pro" color="#f59e0b" delay={0.1} />
-        <StatCard icon={BookOpen} label="Topics Done" value="40/72" sub="Modules" color="#3b82f6" delay={0.15} />
+        <StatCard icon={Target} label="Overall Progress" value={<><CountUp end={overallProgress} suffix="%" /></>} sub="DevOps Pro" color="#f59e0b" delay={0.1} />
+        <StatCard icon={BookOpen} label="Topics Done" value={<>{totalDone}/{totalTopics}</>} sub="Modules" color="#3b82f6" delay={0.15} />
         <StatCard icon={Award} label="Mock Score" value="74%" sub="Last Test" color="#10b981" delay={0.2} />
       </div>
 
       {/* Module cards */}
       <div className="grid lg:grid-cols-2 gap-4">
-        {DEVOPS_MODULES.map((m, i) => (
-          <motion.div
-            key={m.name}
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.25 + i * 0.07 }}
-            className="glass rounded-2xl p-5 card-lift"
-            style={{ border: `1px solid ${m.color}20` }}
-          >
-            <div className="flex items-center gap-3 mb-4">
-              <div className="p-2.5 rounded-xl" style={{ background: `${m.color}20` }}>
-                <m.icon size={18} style={{ color: m.color }} />
+        {modules.map((m, i) => {
+          const isComplete = m.done >= m.topics
+          return (
+            <motion.div
+              key={m.name}
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.25 + i * 0.07 }}
+              className="glass rounded-2xl p-5 card-lift"
+              style={{ border: `1px solid ${isComplete ? m.color + '50' : m.color + '20'}` }}
+            >
+              <div className="flex items-center gap-3 mb-4">
+                <div className="p-2.5 rounded-xl" style={{ background: `${m.color}20` }}>
+                  <m.icon size={18} style={{ color: m.color }} />
+                </div>
+                <div className="flex-1">
+                  <div className="flex items-center gap-2">
+                    <p className="font-semibold text-white">{m.name}</p>
+                    {isComplete && <span className="text-xs px-1.5 py-0.5 rounded-md font-bold" style={{ background: `${m.color}20`, color: m.color }}>✓ Done</span>}
+                  </div>
+                  <p className="text-xs text-slate-500">{m.done} of {m.topics} topics completed</p>
+                </div>
+                <span className="text-lg font-bold" style={{ color: m.color }}>{m.progress}%</span>
               </div>
-              <div className="flex-1">
-                <p className="font-semibold text-white">{m.name}</p>
-                <p className="text-xs text-slate-500">{m.done} of {m.topics} topics completed</p>
+
+              <div className="h-2 bg-slate-800 rounded-full overflow-hidden mb-3">
+                <motion.div
+                  animate={{ width: `${m.progress}%` }}
+                  transition={{ duration: 0.5, ease: 'easeOut' }}
+                  className="h-full rounded-full"
+                  style={{ background: `linear-gradient(90deg, ${m.color}70, ${m.color})` }}
+                />
               </div>
-              <span className="text-lg font-bold" style={{ color: m.color }}>{m.progress}%</span>
-            </div>
 
-            <div className="h-2 bg-slate-800 rounded-full overflow-hidden mb-3">
-              <motion.div
-                initial={{ width: 0 }}
-                animate={{ width: `${m.progress}%` }}
-                transition={{ delay: 0.3 + i * 0.07, duration: 0.9, ease: 'easeOut' }}
-                className="h-full rounded-full"
-                style={{ background: `linear-gradient(90deg, ${m.color}70, ${m.color})` }}
-              />
-            </div>
-
-            <div className="flex items-center justify-between text-xs text-slate-500">
-              <span>{m.topics - m.done} topics remaining</span>
-              <span className="flex items-center gap-1" style={{ color: m.color }}>
-                <ChevronRight size={12} /> Continue
-              </span>
-            </div>
-          </motion.div>
-        ))}
+              <div className="flex items-center justify-between text-xs text-slate-500">
+                <span>{m.topics - m.done} topics remaining</span>
+                <motion.button
+                  onClick={() => markTopicDone(i)}
+                  disabled={isComplete}
+                  whileHover={!isComplete ? { scale: 1.05 } : {}}
+                  whileTap={!isComplete ? { scale: 0.95 } : {}}
+                  className="flex items-center gap-1 px-3 py-1 rounded-lg font-medium transition-all text-xs"
+                  style={isComplete
+                    ? { background: `${m.color}15`, color: m.color, opacity: 0.7 }
+                    : { background: `${m.color}20`, color: m.color, border: `1px solid ${m.color}30` }
+                  }
+                >
+                  {isComplete ? '🏆 Complete' : <><Plus size={10} /> Mark Done</>}
+                </motion.button>
+              </div>
+            </motion.div>
+          )
+        })}
       </div>
 
       {/* Weekly study chart */}
@@ -1101,6 +1512,7 @@ export default function Home() {
   const [activeNav, setActiveNav] = useState('dashboard')
   const [sidebarOpen, setSidebarOpen] = useState(true)
   const [darkMode, setDarkMode] = useState(true)
+  const [toasts, setToasts] = useState([])
 
   useEffect(() => {
     const saved = localStorage.getItem('forgeos-theme')
@@ -1112,6 +1524,23 @@ export default function Home() {
     localStorage.setItem('forgeos-theme', darkMode ? 'dark' : 'light')
   }, [darkMode])
 
+  const addToast = useCallback((msg, color) => {
+    const id = Date.now()
+    setToasts(prev => [...prev, { id, msg, color }])
+    setTimeout(() => setToasts(prev => prev.filter(t => t.id !== id)), 3200)
+  }, [])
+
+  // Keyboard navigation: 1-6 keys switch views
+  useEffect(() => {
+    const handleKey = (e) => {
+      if (e.target.tagName === 'TEXTAREA' || e.target.tagName === 'INPUT') return
+      const idx = parseInt(e.key) - 1
+      if (idx >= 0 && idx < NAV_ITEMS.length) setActiveNav(NAV_ITEMS[idx].id)
+    }
+    window.addEventListener('keydown', handleKey)
+    return () => window.removeEventListener('keydown', handleKey)
+  }, [])
+
   const views = {
     dashboard: <DashboardView />,
     schedule: <ScheduleView />,
@@ -1122,166 +1551,178 @@ export default function Home() {
   }
 
   return (
-    <div data-theme={darkMode ? 'dark' : 'light'} className="min-h-screen relative" style={{ background: 'var(--bg-primary)', transition: 'background 0.3s ease' }}>
-      <BackgroundOrbs />
-      <FloatingParticles />
+    <ToastContext.Provider value={addToast}>
+      <div data-theme={darkMode ? 'dark' : 'light'} className="min-h-screen relative" style={{ background: 'var(--bg-primary)', transition: 'background 0.3s ease' }}>
+        <BackgroundOrbs />
+        <FloatingParticles />
+        <ToastContainer toasts={toasts} />
 
-      <div className="relative z-10 flex min-h-screen">
+        <div className="relative z-10 flex min-h-screen">
 
-        {/* ── Sidebar ── */}
-        <motion.aside
-          initial={{ x: -280 }}
-          animate={{ x: 0 }}
-          transition={{ duration: 0.4, ease: 'easeOut' }}
-          className="glass flex-shrink-0 hidden md:flex flex-col"
-          style={{
-            width: sidebarOpen ? '240px' : '72px',
-            transition: 'width 0.3s ease',
-            borderRight: '1px solid var(--border-subtle)',
-            minHeight: '100vh',
-            position: 'sticky',
-            top: 0,
-            height: '100vh',
-            overflow: 'hidden'
-          }}
-        >
-          {/* Logo */}
-          <div className="p-5 flex items-center gap-3 flex-shrink-0" style={{ borderBottom: '1px solid var(--border-subtle)' }}>
-            <div className="w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0 pulse-glow"
-              style={{ background: 'linear-gradient(135deg,#3b82f6,#8b5cf6,#ec4899)' }}>
-              <Zap size={18} className="text-white" />
-            </div>
-            {sidebarOpen && (
-              <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.1 }}>
-                <p className="font-bold text-white text-sm leading-tight">ForgeOS AI</p>
-                <p className="text-xs text-slate-500">Life Operating System</p>
-              </motion.div>
-            )}
-          </div>
-
-          {/* Nav */}
-          <nav className="flex-1 p-3 space-y-1 overflow-y-auto">
-            {NAV_ITEMS.map(item => (
-              <button
-                key={item.id}
-                onClick={() => setActiveNav(item.id)}
-                className={`nav-item w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm transition-all duration-200 ${activeNav === item.id ? 'active' : ''}`}
-              >
-                <item.icon
-                  size={18}
-                  className="flex-shrink-0"
-                  style={{ color: activeNav === item.id ? '#a78bfa' : '#64748b' }}
-                />
-                {sidebarOpen && (
-                  <span style={{ color: activeNav === item.id ? '#e2e8f0' : '#64748b' }}>
-                    {item.label}
-                  </span>
-                )}
-                {sidebarOpen && activeNav === item.id && (
-                  <motion.div layoutId="activeIndicator" className="ml-auto w-1.5 h-1.5 rounded-full bg-purple-400" />
-                )}
-              </button>
-            ))}
-          </nav>
-
-          {/* Collapse toggle */}
-          <div className="p-3 flex-shrink-0" style={{ borderTop: '1px solid var(--border-subtle)' }}>
-            <button
-              onClick={() => setSidebarOpen(!sidebarOpen)}
-              className="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-xl text-slate-500 hover:text-slate-300 hover:bg-white/5 transition-all text-xs"
-            >
-              <RotateCcw size={14} />
-              {sidebarOpen && 'Collapse'}
-            </button>
-          </div>
-        </motion.aside>
-
-        {/* ── Main content ── */}
-        <main className="flex-1 overflow-y-auto pb-20 md:pb-0">
-          {/* Top bar */}
-          <div className="sticky top-0 z-20 glass px-4 py-3 md:px-6 md:py-4 flex items-center justify-between"
-            style={{ borderBottom: '1px solid var(--border-subtle)' }}>
-            <div className="flex items-center gap-3">
-              {/* Mobile: show logo instead of status dot */}
-              <div className="md:hidden w-8 h-8 rounded-xl flex items-center justify-center flex-shrink-0 pulse-glow"
-                style={{ background: 'linear-gradient(135deg,#3b82f6,#8b5cf6,#ec4899)' }}>
-                <Zap size={15} className="text-white" />
-              </div>
-              <div className="hidden md:flex w-2 h-2 rounded-full bg-emerald-400" style={{ boxShadow: '0 0 8px #10b981' }} />
-              <span className="text-sm font-semibold md:font-normal text-slate-300 md:text-slate-400">
-                {NAV_ITEMS.find(n => n.id === activeNav)?.label}
-              </span>
-            </div>
-            <div className="flex items-center gap-2 md:gap-3">
-              <div className="text-xs text-slate-500 hidden sm:block">
-                {new Date().toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric', month: 'short' })}
-              </div>
-              {/* Dark / Light Mode Toggle */}
-              <button
-                onClick={() => setDarkMode(d => !d)}
-                className="w-8 h-8 rounded-xl flex items-center justify-center transition-all duration-200 hover:scale-110 active:scale-95"
-                style={{
-                  background: darkMode ? 'rgba(139,92,246,0.15)' : 'rgba(251,191,36,0.15)',
-                  border: `1px solid ${darkMode ? 'rgba(139,92,246,0.35)' : 'rgba(251,191,36,0.4)'}`,
-                }}
-                title={darkMode ? 'Switch to Light Mode' : 'Switch to Dark Mode'}
-              >
-                {darkMode
-                  ? <Moon size={14} className="text-purple-400" />
-                  : <Sun size={14} className="text-amber-400" />
-                }
-              </button>
-              <div className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold text-white"
-                style={{ background: 'linear-gradient(135deg,#3b82f6,#8b5cf6)' }}>
-                M
-              </div>
-            </div>
-          </div>
-
-          {/* Page content */}
-          <div className="p-4 md:p-6">
-            <AnimatePresence mode="wait">
-              <motion.div
-                key={activeNav}
-                initial={{ opacity: 0, y: 16 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -16 }}
-                transition={{ duration: 0.25 }}
-              >
-                {views[activeNav]}
-              </motion.div>
-            </AnimatePresence>
-          </div>
-        </main>
-      </div>
-
-      {/* ── Mobile Bottom Navigation ── */}
-      <nav
-        className="fixed bottom-0 left-0 right-0 z-40 flex md:hidden mobile-nav glass"
-        style={{ borderTop: '1px solid var(--border-subtle)' }}
-      >
-        {NAV_ITEMS.map(item => (
-          <button
-            key={item.id}
-            onClick={() => setActiveNav(item.id)}
-            className="flex-1 flex flex-col items-center py-2.5 gap-0.5 transition-all duration-200"
+          {/* ── Sidebar ── */}
+          <motion.aside
+            initial={{ x: -280 }}
+            animate={{ x: 0 }}
+            transition={{ duration: 0.4, ease: 'easeOut' }}
+            className="glass flex-shrink-0 hidden md:flex flex-col"
+            style={{
+              width: sidebarOpen ? '240px' : '72px',
+              transition: 'width 0.3s ease',
+              borderRight: '1px solid var(--border-subtle)',
+              minHeight: '100vh',
+              position: 'sticky',
+              top: 0,
+              height: '100vh',
+              overflow: 'hidden'
+            }}
           >
-            <item.icon
-              size={19}
-              style={{ color: activeNav === item.id ? '#a78bfa' : 'var(--text-muted)' }}
-            />
-            <span
-              style={{
-                fontSize: '9px',
-                fontWeight: activeNav === item.id ? 600 : 400,
-                color: activeNav === item.id ? '#a78bfa' : 'var(--text-muted)',
-              }}
+            {/* Logo */}
+            <div className="p-5 flex items-center gap-3 flex-shrink-0" style={{ borderBottom: '1px solid var(--border-subtle)' }}>
+              <div className="w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0 pulse-glow"
+                style={{ background: 'linear-gradient(135deg,#3b82f6,#8b5cf6,#ec4899)' }}>
+                <Zap size={18} className="text-white" />
+              </div>
+              {sidebarOpen && (
+                <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.1 }}>
+                  <p className="font-bold text-white text-sm leading-tight">ForgeOS AI</p>
+                  <p className="text-xs text-slate-500">Life Operating System</p>
+                </motion.div>
+              )}
+            </div>
+
+            {/* Nav */}
+            <nav className="flex-1 p-3 space-y-1 overflow-y-auto">
+              {NAV_ITEMS.map((item, idx) => (
+                <button
+                  key={item.id}
+                  onClick={() => setActiveNav(item.id)}
+                  className={`nav-item w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm transition-all duration-200 ${activeNav === item.id ? 'active' : ''}`}
+                >
+                  <item.icon
+                    size={18}
+                    className="flex-shrink-0"
+                    style={{ color: activeNav === item.id ? '#a78bfa' : '#64748b' }}
+                  />
+                  {sidebarOpen && (
+                    <span style={{ color: activeNav === item.id ? '#e2e8f0' : '#64748b' }}>
+                      {item.label}
+                    </span>
+                  )}
+                  {sidebarOpen && activeNav === item.id && (
+                    <motion.div layoutId="activeIndicator" className="ml-auto w-1.5 h-1.5 rounded-full bg-purple-400" />
+                  )}
+                  {sidebarOpen && (
+                    <span className="ml-auto text-xs text-slate-600 font-mono">{idx + 1}</span>
+                  )}
+                </button>
+              ))}
+            </nav>
+
+            {/* Keyboard hint */}
+            {sidebarOpen && (
+              <div className="px-4 pb-2 flex-shrink-0">
+                <p className="text-xs text-slate-600 text-center">Press 1–6 to switch views</p>
+              </div>
+            )}
+
+            {/* Collapse toggle */}
+            <div className="p-3 flex-shrink-0" style={{ borderTop: '1px solid var(--border-subtle)' }}>
+              <button
+                onClick={() => setSidebarOpen(!sidebarOpen)}
+                className="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-xl text-slate-500 hover:text-slate-300 hover:bg-white/5 transition-all text-xs"
+              >
+                <RotateCcw size={14} />
+                {sidebarOpen && 'Collapse'}
+              </button>
+            </div>
+          </motion.aside>
+
+          {/* ── Main content ── */}
+          <main className="flex-1 overflow-y-auto pb-20 md:pb-0">
+            {/* Top bar */}
+            <div className="sticky top-0 z-20 glass px-4 py-3 md:px-6 md:py-4 flex items-center justify-between"
+              style={{ borderBottom: '1px solid var(--border-subtle)' }}>
+              <div className="flex items-center gap-3">
+                {/* Mobile: show logo */}
+                <div className="md:hidden w-8 h-8 rounded-xl flex items-center justify-center flex-shrink-0 pulse-glow"
+                  style={{ background: 'linear-gradient(135deg,#3b82f6,#8b5cf6,#ec4899)' }}>
+                  <Zap size={15} className="text-white" />
+                </div>
+                <div className="hidden md:flex w-2 h-2 rounded-full bg-emerald-400" style={{ boxShadow: '0 0 8px #10b981' }} />
+                <span className="text-sm font-semibold md:font-normal text-slate-300 md:text-slate-400">
+                  {NAV_ITEMS.find(n => n.id === activeNav)?.label}
+                </span>
+              </div>
+              <div className="flex items-center gap-2 md:gap-3">
+                {/* Live clock */}
+                <LiveClock />
+                {/* Dark / Light Mode Toggle */}
+                <button
+                  onClick={() => setDarkMode(d => !d)}
+                  className="w-8 h-8 rounded-xl flex items-center justify-center transition-all duration-200 hover:scale-110 active:scale-95"
+                  style={{
+                    background: darkMode ? 'rgba(139,92,246,0.15)' : 'rgba(251,191,36,0.15)',
+                    border: `1px solid ${darkMode ? 'rgba(139,92,246,0.35)' : 'rgba(251,191,36,0.4)'}`,
+                  }}
+                  title={darkMode ? 'Switch to Light Mode' : 'Switch to Dark Mode'}
+                >
+                  {darkMode
+                    ? <Moon size={14} className="text-purple-400" />
+                    : <Sun size={14} className="text-amber-400" />
+                  }
+                </button>
+                <div className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold text-white"
+                  style={{ background: 'linear-gradient(135deg,#3b82f6,#8b5cf6)' }}>
+                  M
+                </div>
+              </div>
+            </div>
+
+            {/* Page content */}
+            <div className="p-4 md:p-6">
+              <AnimatePresence mode="wait">
+                <motion.div
+                  key={activeNav}
+                  initial={{ opacity: 0, y: 16 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -16 }}
+                  transition={{ duration: 0.25 }}
+                >
+                  {views[activeNav]}
+                </motion.div>
+              </AnimatePresence>
+            </div>
+          </main>
+        </div>
+
+        {/* ── Mobile Bottom Navigation ── */}
+        <nav
+          className="fixed bottom-0 left-0 right-0 z-40 flex md:hidden mobile-nav glass"
+          style={{ borderTop: '1px solid var(--border-subtle)' }}
+        >
+          {NAV_ITEMS.map(item => (
+            <button
+              key={item.id}
+              onClick={() => setActiveNav(item.id)}
+              className="flex-1 flex flex-col items-center py-2.5 gap-0.5 transition-all duration-200"
             >
-              {item.label}
-            </span>
-          </button>
-        ))}
-      </nav>
-    </div>
+              <item.icon
+                size={19}
+                style={{ color: activeNav === item.id ? '#a78bfa' : 'var(--text-muted)' }}
+              />
+              <span
+                style={{
+                  fontSize: '9px',
+                  fontWeight: activeNav === item.id ? 600 : 400,
+                  color: activeNav === item.id ? '#a78bfa' : 'var(--text-muted)',
+                }}
+              >
+                {item.label}
+              </span>
+            </button>
+          ))}
+        </nav>
+      </div>
+    </ToastContext.Provider>
   )
 }
