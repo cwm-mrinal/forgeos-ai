@@ -29,9 +29,10 @@ Parameters:
   CertificateArn:
     Type: String
     Description: >
-      ACM Certificate ARN from us-east-1 for forgeos-ai.wmintelliops.com.
-      Paste the ARN from ACM Console here.
-    Default: "arn:aws:acm:ap-south-1:036160411876:certificate/af94f048-8e1b-465e-a0af-7b637976693c"
+      ACM Certificate ARN - MUST be from us-east-1 region (CloudFront requirement).
+      Go to: ACM Console (switch region to us-east-1) → Your certificate → Copy ARN.
+      Format: arn:aws:acm:us-east-1:ACCOUNT_ID:certificate/xxxx
+    Default: ""
 
 Globals:
   Function:
@@ -179,6 +180,7 @@ Resources:
 
   ForgeOSAIDNSRecord:
     Type: AWS::Route53::RecordSet
+    DeletionPolicy: Retain
     DependsOn: ForgeOSAICloudFront
     Properties:
       HostedZoneId: !Ref HostedZoneId
