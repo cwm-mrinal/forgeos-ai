@@ -1,0 +1,156 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: ForgeOS AI - Full Stack (Lambda + API Gateway + Bedrock + S3 + CloudFront)
+
+Globals:
+  Function:
+    Runtime: python3.12
+    MemorySize: 1024
+    Timeout: 60
+  Api:
+    Cors:
+      AllowMethods: "'POST,OPTIONS'"
+      AllowHeaders: "'Content-Type,X-Amz-Date,Authorization,X-Api-Key'"
+      AllowOrigin: "'*'"
+
+Resources:
+
+  # ========================================
+  # Backend: Lambda + API Gateway
+  # ========================================
+
+  ForgeOSAIChat:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: lambda_function.lambda_handler
+      CodeUri: ../forgeos-ai-backend/
+
+      Environment:
+        Variables:
+          INFERENCE_PROFILE_ARN: arn:aws:bedrock:ap-south-1:036160411876:inference-profile/global.anthropic.claude-haiku-4-5-20251001-v1:0
+
+      Policies:
+        - Statement:
+            - Effect: Allow
+              Action:
+                - bedrock:InvokeModel
+                - bedrock:InvokeModelWithResponseStream
+              Resource: "*"
+
+      Events:
+        ChatAPI:
+          Type: Api
+          Properties:
+            Path: /chat
+            Method: post
+
+  # ========================================
+  # Frontend: S3 Bucket
+  # ========================================
+
+  ForgeOSAIBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: forgeos-ai-bucket
+      WebsiteConfiguration:
+        IndexDocument: index.html
+        ErrorDocument: index.html
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: false
+        BlockPublicPolicy: false
+        IgnorePublicAcls: false
+        RestrictPublicBuckets: false
+      CorsConfiguration:
+        CorsRules:
+          - AllowedOrigins:
+              - '*'
+            AllowedMethods:
+              - GET
+              - HEAD
+            AllowedHeaders:
+              - '*'
+
+  ForgeOSAIBucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: !Ref ForgeOSAIBucket
+      PolicyDocument:
+        Statement:
+          - Sid: PublicReadGetObject
+            Effect: Allow
+            Principal: '*'
+            Action: 's3:GetObject'
+            Resource: !Sub '${ForgeOSAIBucket.Arn}/*'
+
+  # ========================================
+  # CloudFront Distribution
+  # ========================================
+
+  ForgeOSAICloudFront:
+    Type: AWS::CloudFront::Distribution
+    Properties:
+      DistributionConfig:
+        Enabled: true
+        Comment: ForgeOS AI Frontend CDN
+        DefaultRootObject: index.html
+        HttpVersion: http2
+        PriceClass: PriceClass_100
+
+        Origins:
+          - Id: S3Origin
+            DomainName: !GetAtt ForgeOSAIBucket.RegionalDomainName
+            S3OriginConfig:
+              OriginAccessIdentity: ''
+            CustomOriginConfig:
+              HTTPPort: 80
+              HTTPSPort: 443
+              OriginProtocolPolicy: http-only
+
+        DefaultCacheBehavior:
+          TargetOriginId: S3Origin
+          ViewerProtocolPolicy: redirect-to-https
+          AllowedMethods:
+            - GET
+            - HEAD
+            - OPTIONS
+          CachedMethods:
+            - GET
+            - HEAD
+          Compress: true
+          ForwardedValues:
+            QueryString: false
+            Cookies:
+              Forward: none
+
+        CustomErrorResponses:
+          - ErrorCode: 403
+            ResponseCode: 200
+            ResponsePagePath: /index.html
+          - ErrorCode: 404
+            ResponseCode: 200
+            ResponsePagePath: /index.html
+
+Outputs:
+  ApiUrl:
+    Description: "API Gateway endpoint URL - use this as NEXT_PUBLIC_API_URL"
+    Value: !Sub "https://${ServerlessRestApi}.execute-api.${AWS::Region}.amazonaws.com/Prod"
+    Export:
+      Name: ForgeOSAI-ApiUrl
+
+  BucketName:
+    Description: "S3 Bucket for frontend hosting"
+    Value: !Ref ForgeOSAIBucket
+    Export:
+      Name: ForgeOSAI-BucketName
+
+  CloudFrontURL:
+    Description: "CloudFront Distribution URL - Your live app URL"
+    Value: !GetAtt ForgeOSAICloudFront.DomainName
+    Export:
+      Name: ForgeOSAI-CloudFrontURL
+
+  CloudFrontDistributionId:
+    Description: "CloudFront Distribution ID - for cache invalidation"
+    Value: !Ref ForgeOSAICloudFront
+    Export:
+      Name: ForgeOSAI-CloudFrontDistributionId

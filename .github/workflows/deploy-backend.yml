@@ -1,0 +1,86 @@
+name: Deploy ForgeOS AI Backend
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'forgeos-ai-backend/**'
+      - 'forgeos-ai-infra/**'
+      - '.github/workflows/deploy-backend.yml'
+
+  workflow_dispatch:
+
+jobs:
+  deploy-backend:
+    name: SAM Build & Deploy
+    runs-on: ubuntu-latest
+
+    steps:
+      # ----------------------------------------
+      # 1. Checkout Code
+      # ----------------------------------------
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      # ----------------------------------------
+      # 2. Configure AWS Credentials
+      # ----------------------------------------
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ secrets.AWS_REGION }}
+
+      # ----------------------------------------
+      # 3. Setup Python
+      # ----------------------------------------
+      - name: Setup Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      # ----------------------------------------
+      # 4. Install AWS SAM CLI
+      # ----------------------------------------
+      - name: Install AWS SAM CLI
+        uses: aws-actions/setup-sam@v2
+        with:
+          use-installer: true
+
+      # ----------------------------------------
+      # 5. SAM Build
+      # ----------------------------------------
+      - name: SAM Build
+        working-directory: forgeos-ai-infra
+        run: sam build --template template.yaml
+
+      # ----------------------------------------
+      # 6. SAM Deploy
+      # ----------------------------------------
+      - name: SAM Deploy
+        working-directory: forgeos-ai-infra
+        run: |
+          sam deploy \
+            --no-confirm-changeset \
+            --no-fail-on-empty-changeset \
+            --stack-name forgeos-ai-stack \
+            --region ${{ secrets.AWS_REGION }} \
+            --capabilities CAPABILITY_IAM CAPABILITY_AUTO_EXPAND \
+            --s3-bucket ${{ secrets.AWS_BUCKET_NAME }} \
+            --s3-prefix sam-artifacts
+
+      # ----------------------------------------
+      # 7. Print API Gateway URL
+      # ----------------------------------------
+      - name: Print API Gateway URL
+        run: |
+          echo "========================================"
+          echo "Backend deployed successfully!"
+          echo "========================================"
+          aws cloudformation describe-stacks \
+            --stack-name forgeos-ai-stack \
+            --region ${{ secrets.AWS_REGION }} \
+            --query "Stacks[0].Outputs[?OutputKey=='ApiUrl'].OutputValue" \
+            --output text
