@@ -1,0 +1,46 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: >
+  ForgeOS AI - ACM SSL Certificate (MUST be deployed in us-east-1)
+  CloudFront requires certificates to be in us-east-1 only.
+  Deploy this stack FIRST, then use the CertificateArn output
+  as a parameter when deploying the main template.yaml stack.
+
+Parameters:
+
+  DomainName:
+    Type: String
+    Default: forgeos-ai.wmintelliops.com
+    Description: Domain to issue the SSL certificate for
+
+  HostedZoneId:
+    Type: String
+    Description: >
+      Route53 Hosted Zone ID for wmintelliops.com
+      Find it at: AWS Console → Route53 → Hosted Zones → wmintelliops.com
+
+Resources:
+
+  ForgeOSAICertificate:
+    Type: AWS::CertificateManager::Certificate
+    Properties:
+      DomainName: !Ref DomainName
+      ValidationMethod: DNS
+      # Auto-validates via Route53 DNS (no email needed)
+      DomainValidationOptions:
+        - DomainName: !Ref DomainName
+          HostedZoneId: !Ref HostedZoneId
+      Tags:
+        - Key: Name
+          Value: forgeos-ai-ssl-certificate
+        - Key: Project
+          Value: ForgeOS-AI
+
+Outputs:
+
+  CertificateArn:
+    Description: >
+      ACM Certificate ARN - copy this value and use it as the
+      CertificateArn parameter when deploying the main template.yaml
+    Value: !Ref ForgeOSAICertificate
+    Export:
+      Name: ForgeOSAI-CertificateArn

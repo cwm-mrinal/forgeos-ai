@@ -1,0 +1,26 @@
+# Environment variables - NEVER commit these
+.env
+.env.local
+.env.*.local
+.env.production
+
+# Next.js
+forgeos-ai-frontend/.next/
+forgeos-ai-frontend/out/
+forgeos-ai-frontend/node_modules/
+
+# SAM build artifacts
+forgeos-ai-infra/.aws-sam/
+forgeos-ai-infra/samconfig.toml
+
+# AWS credentials
+.aws/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+*.swp

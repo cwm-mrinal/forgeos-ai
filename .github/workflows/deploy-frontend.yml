@@ -74,16 +74,19 @@ jobs:
 
       # ----------------------------------------
       # 7. Sync to S3
+      #    - JS/CSS/fonts: long cache (immutable)
+      #    - HTML files: no-cache (always fresh)
       # ----------------------------------------
       - name: Deploy to S3
         run: |
+          # Upload static assets with long-term cache
           aws s3 sync forgeos-ai-frontend/out/ s3://${{ secrets.AWS_BUCKET_NAME }} \
             --delete \
             --cache-control "public, max-age=31536000, immutable" \
             --exclude "*.html"
 
+          # Upload HTML files with no-cache
           aws s3 sync forgeos-ai-frontend/out/ s3://${{ secrets.AWS_BUCKET_NAME }} \
-            --delete \
             --cache-control "public, no-cache" \
             --include "*.html"
 
@@ -105,16 +108,17 @@ jobs:
             --paths "/*"
 
       # ----------------------------------------
-      # 9. Print Live URL
+      # 9. Print Live URLs
       # ----------------------------------------
-      - name: Print Live URL
+      - name: Print Live URLs
         run: |
-          CDN_URL=$(aws cloudformation describe-stacks \
-            --stack-name forgeos-ai-stack \
-            --region ${{ secrets.AWS_REGION }} \
-            --query "Stacks[0].Outputs[?OutputKey=='CloudFrontURL'].OutputValue" \
-            --output text)
           echo "========================================"
           echo "Frontend deployed successfully!"
-          echo "Live URL: https://$CDN_URL"
+          echo "========================================"
+          echo "Custom Domain : https://forgeos-ai.wmintelliops.com"
+          echo "CloudFront URL: https://$(aws cloudformation describe-stacks \
+            --stack-name forgeos-ai-stack \
+            --region ${{ secrets.AWS_REGION }} \
+            --query "Stacks[0].Outputs[?OutputKey=='CloudFrontDomain'].OutputValue" \
+            --output text)"
           echo "========================================"

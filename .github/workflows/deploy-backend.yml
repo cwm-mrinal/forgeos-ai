@@ -58,6 +58,8 @@ jobs:
 
       # ----------------------------------------
       # 6. SAM Deploy
+      #    Passes HostedZoneId and CertificateArn
+      #    from GitHub Secrets as stack parameters
       # ----------------------------------------
       - name: SAM Deploy
         working-directory: forgeos-ai-infra
@@ -69,12 +71,17 @@ jobs:
             --region ${{ secrets.AWS_REGION }} \
             --capabilities CAPABILITY_IAM CAPABILITY_AUTO_EXPAND \
             --s3-bucket ${{ secrets.AWS_BUCKET_NAME }} \
-            --s3-prefix sam-artifacts
+            --s3-prefix sam-artifacts \
+            --parameter-overrides \
+              DomainName=forgeos-ai.wmintelliops.com \
+              HostedZoneName=wmintelliops.com \
+              HostedZoneId=${{ secrets.ROUTE53_HOSTED_ZONE_ID }} \
+              CertificateArn=${{ secrets.ACM_CERTIFICATE_ARN }}
 
       # ----------------------------------------
-      # 7. Print API Gateway URL
+      # 7. Print Outputs
       # ----------------------------------------
-      - name: Print API Gateway URL
+      - name: Print Stack Outputs
         run: |
           echo "========================================"
           echo "Backend deployed successfully!"
@@ -82,5 +89,5 @@ jobs:
           aws cloudformation describe-stacks \
             --stack-name forgeos-ai-stack \
             --region ${{ secrets.AWS_REGION }} \
-            --query "Stacks[0].Outputs[?OutputKey=='ApiUrl'].OutputValue" \
-            --output text
+            --query "Stacks[0].Outputs" \
+            --output table

@@ -1,6 +1,42 @@
 AWSTemplateFormatVersion: '2010-09-09'
 Transform: AWS::Serverless-2016-10-31
-Description: ForgeOS AI - Full Stack (Lambda + API Gateway + Bedrock + S3 + CloudFront)
+Description: >
+  ForgeOS AI - Full Stack
+  Lambda + API Gateway + Bedrock + S3 + CloudFront + ACM + Route53
+  Custom Domain: forgeos-ai.wmintelliops.com
+
+# ============================================================
+# NOTE: ACM Certificate for CloudFront MUST be in us-east-1.
+# This template uses a separate nested stack (certificate.yaml)
+# deployed in us-east-1 to provision the cert, then passes
+# the ARN into the CloudFront distribution here.
+# ============================================================
+
+Parameters:
+
+  DomainName:
+    Type: String
+    Default: forgeos-ai.wmintelliops.com
+    Description: Custom domain for the ForgeOS AI frontend
+
+  HostedZoneName:
+    Type: String
+    Default: wmintelliops.com
+    Description: Route53 Hosted Zone name (without trailing dot)
+
+  HostedZoneId:
+    Type: String
+    Description: >
+      Route53 Hosted Zone ID for wmintelliops.com.
+      Find it at: AWS Console → Route53 → Hosted Zones → wmintelliops.com
+    Default: ""
+
+  CertificateArn:
+    Type: String
+    Description: >
+      ACM Certificate ARN from us-east-1 for forgeos-ai.wmintelliops.com.
+      Run certificate.yaml stack FIRST in us-east-1, then paste the ARN here.
+    Default: ""
 
 Globals:
   Function:
@@ -88,26 +124,36 @@ Resources:
 
   ForgeOSAICloudFront:
     Type: AWS::CloudFront::Distribution
+    DependsOn: ForgeOSAIBucket
     Properties:
       DistributionConfig:
         Enabled: true
-        Comment: ForgeOS AI Frontend CDN
+        Comment: ForgeOS AI - forgeos-ai.wmintelliops.com
         DefaultRootObject: index.html
         HttpVersion: http2
         PriceClass: PriceClass_100
 
+        # Custom domain alias
+        Aliases:
+          - !Ref DomainName
+
+        # ACM SSL Certificate (provisioned in us-east-1 via certificate.yaml)
+        ViewerCertificate:
+          AcmCertificateArn: !Ref CertificateArn
+          SslSupportMethod: sni-only
+          MinimumProtocolVersion: TLSv1.2_2021
+
         Origins:
-          - Id: S3Origin
-            DomainName: !GetAtt ForgeOSAIBucket.RegionalDomainName
-            S3OriginConfig:
-              OriginAccessIdentity: ''
+          - Id: S3WebsiteOrigin
+            # S3 website endpoint (supports index.html routing)
+            DomainName: !Sub 'forgeos-ai-bucket.s3-website.${AWS::Region}.amazonaws.com'
             CustomOriginConfig:
               HTTPPort: 80
               HTTPSPort: 443
               OriginProtocolPolicy: http-only
 
         DefaultCacheBehavior:
-          TargetOriginId: S3Origin
+          TargetOriginId: S3WebsiteOrigin
           ViewerProtocolPolicy: redirect-to-https
           AllowedMethods:
             - GET
@@ -130,27 +176,55 @@ Resources:
             ResponseCode: 200
             ResponsePagePath: /index.html
 
+  # ========================================
+  # Route53: A Record → CloudFront (Alias)
+  # ========================================
+
+  ForgeOSAIDNSRecord:
+    Type: AWS::Route53::RecordSet
+    DependsOn: ForgeOSAICloudFront
+    Properties:
+      HostedZoneId: !Ref HostedZoneId
+      Name: !Ref DomainName
+      Type: A
+      AliasTarget:
+        # Z2FDTNDATAQYW2 is the fixed CloudFront hosted zone ID (AWS global constant)
+        HostedZoneId: Z2FDTNDATAQYW2
+        DNSName: !GetAtt ForgeOSAICloudFront.DomainName
+        EvaluateTargetHealth: false
+
+# ========================================
+# Outputs
+# ========================================
+
 Outputs:
+
   ApiUrl:
-    Description: "API Gateway endpoint URL - use this as NEXT_PUBLIC_API_URL"
+    Description: "API Gateway endpoint URL - set as NEXT_PUBLIC_API_URL"
     Value: !Sub "https://${ServerlessRestApi}.execute-api.${AWS::Region}.amazonaws.com/Prod"
     Export:
       Name: ForgeOSAI-ApiUrl
 
   BucketName:
-    Description: "S3 Bucket for frontend hosting"
+    Description: "S3 Bucket name for frontend"
     Value: !Ref ForgeOSAIBucket
     Export:
       Name: ForgeOSAI-BucketName
 
-  CloudFrontURL:
-    Description: "CloudFront Distribution URL - Your live app URL"
+  CloudFrontDomain:
+    Description: "CloudFront default domain (*.cloudfront.net)"
     Value: !GetAtt ForgeOSAICloudFront.DomainName
     Export:
       Name: ForgeOSAI-CloudFrontURL
 
   CloudFrontDistributionId:
-    Description: "CloudFront Distribution ID - for cache invalidation"
+    Description: "CloudFront Distribution ID - used for cache invalidation in CI/CD"
     Value: !Ref ForgeOSAICloudFront
     Export:
       Name: ForgeOSAI-CloudFrontDistributionId
+
+  CustomDomainURL:
+    Description: "Your live ForgeOS AI URL"
+    Value: !Sub "https://${DomainName}"
+    Export:
+      Name: ForgeOSAI-CustomDomainURL
