@@ -41,10 +41,10 @@ jobs:
           node-version: '20'
 
       # ----------------------------------------
-      # 4. Fetch API Gateway URL from CloudFormation
+      # 4. Fetch Stack Outputs from CloudFormation
       # ----------------------------------------
-      - name: Get API Gateway URL from CloudFormation
-        id: get-api-url
+      - name: Get Stack Outputs from CloudFormation
+        id: get-stack-outputs
         run: |
           API_URL=$(aws cloudformation describe-stacks \
             --stack-name forgeos-ai-stack \
@@ -53,6 +53,14 @@ jobs:
             --output text)
           echo "API_URL=$API_URL" >> $GITHUB_OUTPUT
           echo "Fetched API URL: $API_URL"
+
+          BUCKET_NAME=$(aws cloudformation describe-stacks \
+            --stack-name forgeos-ai-stack \
+            --region ${{ secrets.AWS_REGION }} \
+            --query "Stacks[0].Outputs[?OutputKey=='BucketName'].OutputValue" \
+            --output text)
+          echo "BUCKET_NAME=$BUCKET_NAME" >> $GITHUB_OUTPUT
+          echo "Fetched Bucket Name: $BUCKET_NAME"
 
       # ----------------------------------------
       # 5. Install Dependencies
@@ -67,7 +75,7 @@ jobs:
       - name: Build Next.js App
         working-directory: forgeos-ai-frontend
         env:
-          NEXT_PUBLIC_API_URL: ${{ steps.get-api-url.outputs.API_URL }}
+          NEXT_PUBLIC_API_URL: ${{ steps.get-stack-outputs.outputs.API_URL }}
         run: npm run build
 
       # ----------------------------------------
@@ -77,14 +85,16 @@ jobs:
       # ----------------------------------------
       - name: Deploy to S3
         run: |
+          BUCKET_NAME=${{ steps.get-stack-outputs.outputs.BUCKET_NAME }}
+
           # Upload static assets with long-term cache
-          aws s3 sync forgeos-ai-frontend/out/ s3://${{ secrets.AWS_BUCKET_NAME }} \
+          aws s3 sync forgeos-ai-frontend/out/ s3://$BUCKET_NAME \
             --delete \
             --cache-control "public, max-age=31536000, immutable" \
             --exclude "*.html"
 
           # Upload HTML files with no-cache
-          aws s3 sync forgeos-ai-frontend/out/ s3://${{ secrets.AWS_BUCKET_NAME }} \
+          aws s3 sync forgeos-ai-frontend/out/ s3://$BUCKET_NAME \
             --cache-control "public, no-cache" \
             --include "*.html"
 
