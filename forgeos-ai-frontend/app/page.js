@@ -78,7 +78,7 @@ const WORKOUTS = [
   {
     id: 'mobility', name: 'Mobility Recovery', icon: '🧘', color: '#06b6d4',
     muscles: ['Hip Flexors', 'Thoracic Spine', 'Hamstrings'],
-    exercises: ['Hip 90/90', 'Cat-Cow', 'World's Greatest Stretch', 'Pigeon Pose', 'Thoracic Rotation'],
+    exercises: ['Hip 90/90', 'Cat-Cow', "World's Greatest Stretch", 'Pigeon Pose', 'Thoracic Rotation'],
     sets: '3×45s', rest: '15s', calories: 120,
     animation: 'mobility',
     tip: 'Breathe into the stretch — exhale to deepen. Never force range of motion.'
