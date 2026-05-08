@@ -32,7 +32,7 @@ Parameters:
       ACM Certificate ARN - MUST be from us-east-1 region (CloudFront requirement).
       Go to: ACM Console (switch region to us-east-1) → Your certificate → Copy ARN.
       Format: arn:aws:acm:us-east-1:ACCOUNT_ID:certificate/xxxx
-    Default: ""
+    Default: "arn:aws:acm:us-east-1:036160411876:certificate/5f277fe4-089d-442e-8ed8-0ed00be2a9a4"
 
 Globals:
   Function:
@@ -144,8 +144,10 @@ Resources:
 
         Origins:
           - Id: S3WebsiteOrigin
-            # S3 website endpoint (supports index.html routing)
-            DomainName: !Sub 'forgeos-ai-bucket.s3-website.${AWS::Region}.amazonaws.com'
+            # Dynamic S3 website endpoint using the actual bucket name
+            DomainName: !Select
+              - 1
+              - !Split ["//", !GetAtt ForgeOSAIBucket.WebsiteURL]
             CustomOriginConfig:
               HTTPPort: 80
               HTTPSPort: 443
