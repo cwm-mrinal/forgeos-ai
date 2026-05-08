@@ -144,8 +144,7 @@ def invoke_bedrock(query, history=None):
         messages=messages,
         inferenceConfig={
             "maxTokens": 2000,
-            "temperature": 0.5,
-            "topP": 0.9
+            "temperature": 0.4
         }
     )
 
