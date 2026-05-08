@@ -457,7 +457,7 @@ function FloatingParticles() {
           key={p.id}
           className="absolute rounded-full"
           style={{ left: `${p.x}%`, bottom: '-10px', width: p.size, height: p.size, background: p.color, opacity: 0.4 }}
-          animate={{ y: [0, -window?.innerHeight || -800], opacity: [0, 0.6, 0] }}
+          animate={{ y: [0, -800], opacity: [0, 0.6, 0] }}
           transition={{ duration: p.duration, delay: p.delay, repeat: Infinity, ease: 'linear' }}
         />
       ))}
